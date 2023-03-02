@@ -4,12 +4,16 @@ http://localhost:4001 {
 	}
 
 	handle @preflight {
-		header Access-Control-Allow-Origin *
+		header Access-Control-Allow-Credentials "true"
+		header Access-Control-Allow-Origin "*"
+		# header Access-Control-Allow-Origin "null"
 		header Access-Control-Allow-Headers "authorization, content-type"
 		respond "ok"
 	}
 
 	reverse_proxy :4100 {
-		header_down Access-Control-Allow-Origin *
+		header_down Access-Control-Allow-Credentials "true"
+		header_down Access-Control-Allow-Origin "*"
+		# header_down Access-Control-Allow-Origin "null"
 	}
 }
