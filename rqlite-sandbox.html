@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Rqlite Tester</title>
+    <script type="importmap">
+      {
+        "imports": {
+          "ky": "https://cdn.jsdelivr.net/npm/ky@0.33.2/+esm",
+          "htm": "https://cdn.jsdelivr.net/npm/htm@3.1.1/+esm",
+          "preact": "https://cdn.jsdelivr.net/npm/preact@10.13.0/dist/preact.mjs",
+          "preact/hooks": "https://cdn.jsdelivr.net/npm/preact@10.13.0/hooks/dist/hooks.module.js",
+          "sql-formatter": "https://cdn.jsdelivr.net/npm/sql-formatter@12.1.2/+esm",
+          "serialize-error": "https://cdn.jsdelivr.net/npm/serialize-error@11.0.0/+esm"
+        }
+      }
+    </script>
+  </head>
+  <body>
+    <script type="module">
+      import htm from "htm";
+      import ky from "ky";
+      import { h, render } from "preact";
+      import { useRef, useState } from "preact/hooks";
+
+      const html = htm.bind(h);
+
+      const PRESET = [
+        "CREATE TABLE foo (id INTEGER NOT NULL PRIMARY KEY, name TEXT, age INTEGER)",
+        'INSERT INTO foo(name, age) VALUES("fiona", 20)',
+        "SELECT * FROM foo",
+      ];
+
+      const Result = ({ value }) => {
+        if (value == null) {
+          return null;
+        } else if (value instanceof Error) {
+          return html`<div style=${{ backgroundColor: "#FF9999", padding: 4 }}>
+            <div>Error</div>
+            <div>Name: ${value.name}</div>
+            <div>Message: ${value.message}</div>
+            <pre style=${{ whiteSpace: "pre-wrap" }}>${value.stack}</pre>
+          </div>`;
+        } else {
+          return html`<pre>${JSON.stringify(value, undefined, 2)}</pre>`;
+        }
+      };
+
+      const DEFAULT_DATABASE_URL = "http://localhost:4001";
+      const DEFAULT_USERNAME = "bob";
+      const DEFAULT_PASSWORD = "secret1";
+
+      const App = () => {
+        const databaseUrlRef = useRef();
+        const usernameRef = useRef();
+        const passwordRef = useRef();
+        const queryRef = useRef();
+
+        const [query, setQuery] = useState(`select * from x`);
+        const [result, setResult] = useState();
+
+        const handleSubmit = () => {
+          setQuery(queryRef.current.value);
+          executePost(queryRef.current.value);
+        };
+
+        const getClient = () => {
+          const databaseUri = databaseUrlRef.current.value;
+          const username = usernameRef.current.value;
+          const password = passwordRef.current.value;
+
+          const headers =
+            username || password
+              ? {
+                  Authorization: `Basic ${btoa(username + ":" + password)}`,
+                }
+              : {};
+
+          return ky.create({ prefixUrl: databaseUri, headers });
+        };
+
+        const queryGet = async (body) => {
+          setResult(undefined);
+          await getClient()
+            .get("db/query", {
+              searchParams: { q: body },
+              throwHttpErrors: false,
+              timeout: false,
+            })
+            .json()
+            .then((result) => setResult(result))
+            .catch((err) => setResult(err));
+        };
+
+        const queryPost = async (body) => {
+          setResult(undefined);
+          await getClient()
+            .post("db/query", {
+              json: [body],
+              throwHttpErrors: false,
+              timeout: false,
+            })
+            .json()
+            .then((result) => setResult(result))
+            .catch((err) => setResult(err));
+        };
+
+        const executePost = async (body) => {
+          setResult(undefined);
+          await getClient()
+            .post("db/execute", {
+              json: [body],
+              throwHttpErrors: false,
+              timeout: false,
+            })
+            .json()
+            .then((result) => setResult(result))
+            .catch((err) => setResult(err));
+        };
+
+        console.log("RESULT", result);
+
+        return html`
+          <div style="display: flex; flex-direction: column; gap: 8px;">
+            <label>
+              Database URL
+              <input
+                ref=${databaseUrlRef}
+                defaultValue=${DEFAULT_DATABASE_URL}
+              />
+            </label>
+
+            <label>
+              Username
+              <input ref=${usernameRef} defaultValue=${DEFAULT_USERNAME} />
+            </label>
+
+            <label>
+              Password
+              <input ref=${passwordRef} defaultValue=${DEFAULT_PASSWORD} />
+            </label>
+
+            <div>Preset queries</div>
+
+            ${PRESET.map(
+              (preset) =>
+                html`<a
+                  key=${preset}
+                  href=""
+                  onClick=${(event) => {
+                    event.preventDefault();
+                    queryRef.current.value = preset;
+                  }}
+                  >${preset}</a
+                >`
+            )}
+
+            <label style="display: flex; flex-direction: column; gap: 8px;">
+              <div>Query</div>
+              <textarea ref=${queryRef} defaultValue=${query} rows="6" />
+            </label>
+
+            <button
+              type="button"
+              onClick=${() => {
+                queryGet(queryRef.current.value);
+              }}
+            >
+              Query (HTTP GET)
+            </button>
+
+            <button
+              type="button"
+              onClick=${() => {
+                queryPost(queryRef.current.value);
+              }}
+            >
+              Query (HTTP POST)
+            </button>
+
+            <button
+              type="button"
+              onClick=${() => {
+                executePost(queryRef.current.value);
+              }}
+            >
+              Execute (HTTP POST)
+            </button>
+            <button
+              type="button"
+              onClick=${async () => {
+                const { format } = await import("sql-formatter");
+                queryRef.current.value = format(queryRef.current.value, {
+                  language: "sqlite",
+                  tabWidth: 2,
+                  keywordCase: "upper",
+                });
+              }}
+            >
+              Format query
+            </button>
+          </div>
+          <${Result} value=${result} />
+        `;
+      };
+
+      render(h(App), document.body);
+    </script>
+  </body>
+</html>

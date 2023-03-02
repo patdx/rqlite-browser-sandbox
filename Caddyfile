@@ -1,0 +1,15 @@
+http://localhost:4001 {
+	@preflight {
+		method OPTIONS
+	}
+
+	handle @preflight {
+		header Access-Control-Allow-Origin *
+		header Access-Control-Allow-Headers "authorization, content-type"
+		respond "ok"
+	}
+
+	reverse_proxy :4100 {
+		header_down Access-Control-Allow-Origin *
+	}
+}
